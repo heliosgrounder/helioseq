@@ -52,6 +52,6 @@ def test_architecture_doc_exists_and_lists_the_domains():
     if doc is None:
         pytest.skip("running from an installed package without the docs directory")
 
-    text = doc.read_text()
+    text = doc.read_text(encoding="utf-8")
     for domain in helioseq._SUBPACKAGES:
         assert domain in text, "docs/architecture.md does not mention %r" % domain
