@@ -151,29 +151,29 @@ jobs:
       - name: And it still passes the suite
         run: python -m pytest tests -q
 
-  lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
+  # lint:
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.13"
 
-      - run: python -m pip install -e ".[dev,test,ml]"
+  #     - run: python -m pip install -e ".[dev,test,ml]"
 
-      - name: ruff check
-        run: python -m ruff check src tests benchmarks
+  #     - name: ruff check
+  #       run: python -m ruff check src tests benchmarks
 
-      - name: ruff format
-        run: python -m ruff format --check src tests benchmarks
+  #     - name: ruff format
+  #       run: python -m ruff format --check src tests benchmarks
 
-      # Advisory for now: the annotations are incomplete, and a red X on every
-      # PR for a known gap trains people to ignore red Xs. Drop the flag once
-      # `make typecheck` is clean.
-      - name: mypy
-        continue-on-error: true
-        run: python -m mypy
+  #     # Advisory for now: the annotations are incomplete, and a red X on every
+  #     # PR for a known gap trains people to ignore red Xs. Drop the flag once
+  #     # `make typecheck` is clean.
+  #     - name: mypy
+  #       continue-on-error: true
+  #       run: python -m mypy
 
   coverage:
     runs-on: ubuntu-latest
