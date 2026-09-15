@@ -57,7 +57,7 @@ Homepage = "https://github.com/heliosgrounder/helioseq"
 Source = "https://github.com/heliosgrounder/helioseq"
 Issues = "https://github.com/heliosgrounder/helioseq/issues"
 Changelog = "https://github.com/heliosgrounder/helioseq/blob/main/CHANGELOG.md"
-"Shuffling algorithm (please cite)" = "https://doi.org/10.1186/1471-2105-9-192"
+"Citation" = "https://doi.org/10.1186/1471-2105-9-192"
 
 [project.scripts]
 helioseq = "helioseq.cli:main"
