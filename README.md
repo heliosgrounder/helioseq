@@ -317,7 +317,7 @@ succeeds and prints a warning; `helioseq info` reports which backend is live.
 | `structure` | the layering rules in `docs/architecture.md`, and every docstring example |
 | `no-compiler` | installing with every compiler hidden still works, on the fallback |
 | `packaging` | the sdist carries the C sources and rebuilds from scratch |
-| `lint`, `coverage` | ruff, mypy (advisory), coverage in the job summary |
+| `coverage` | coverage in the job summary |
 
 `release.yml` runs on a `v*` tag, or manually with a TestPyPI/PyPI choice. It
 checks the tag, `pyproject.toml`, `__version__` and `CHANGELOG.md` all agree
