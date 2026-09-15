@@ -252,7 +252,7 @@ jobs:
           python -c "import helioseq; assert helioseq.shuffle.backend() == 'c'; print(helioseq.shuffle.shuffle('ACGTACGTAGCT', 2, seed=1))"
           helioseq info
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz
