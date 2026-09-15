@@ -145,7 +145,7 @@ jobs:
       matrix:
         python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheels-ubuntu-latest
           path: wheelhouse
@@ -176,7 +176,7 @@ jobs:
     permissions:
       id-token: write  # trusted publishing: no API token is stored anywhere
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -211,7 +211,7 @@ jobs:
       contents: write  # only this job creates anything in the repository
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
