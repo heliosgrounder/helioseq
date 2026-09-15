@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         id: setup
         continue-on-error: true
         with:
@@ -81,7 +81,7 @@ jobs:
           CIBW_BUILD: cp39-manylinux_x86_64
           CIBW_ENVIRONMENT: HELIOSEQ_REQUIRE_EXTENSION=1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         id: setup
         continue-on-error: true
         with:
