@@ -1,0 +1,59 @@
+cff-version: 1.2.0
+title: "helioseq: a toolkit for working with biological sequences in Python"
+message: >-
+  If you use the shuffling functionality, please cite the original uShuffle
+  paper, which describes the algorithm. Cite this package as well only if the
+  software itself is relevant to your work.
+type: software
+authors:
+  - given-names: Helios
+    family-names: Grounder
+repository-code: "https://github.com/heliosgrounder/helioseq"
+license: BSD-3-Clause
+version: 0.1.0
+date-released: "2026-09-15"
+keywords:
+  - bioinformatics
+  - sequence analysis
+  - fasta
+  - sequence shuffling
+  - null model
+  - dinucleotide
+references:
+  - type: article
+    title: >-
+      uShuffle: a useful tool for shuffling biological sequences while
+      preserving the k-let counts
+    authors:
+      - given-names: Minghui
+        family-names: Jiang
+      - given-names: James
+        family-names: Anderson
+      - given-names: Joel
+        family-names: Gillespie
+      - given-names: Martin
+        family-names: Mayne
+    journal: BMC Bioinformatics
+    year: 2008
+    volume: 9
+    start: 192
+    doi: 10.1186/1471-2105-9-192
+preferred-citation:
+  type: article
+  title: >-
+    uShuffle: a useful tool for shuffling biological sequences while preserving
+    the k-let counts
+  authors:
+    - given-names: Minghui
+      family-names: Jiang
+    - given-names: James
+      family-names: Anderson
+    - given-names: Joel
+      family-names: Gillespie
+    - given-names: Martin
+      family-names: Mayne
+  journal: BMC Bioinformatics
+  year: 2008
+  volume: 9
+  start: 192
+  doi: 10.1186/1471-2105-9-192

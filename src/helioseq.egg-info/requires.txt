@@ -1,0 +1,14 @@
+
+[dev]
+build
+cibuildwheel
+mypy
+ruff
+twine
+
+[ml]
+numpy>=1.21
+
+[test]
+pytest-cov
+pytest>=7

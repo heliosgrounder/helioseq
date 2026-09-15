@@ -1,0 +1,348 @@
+# helioseq
+
+[![CI](https://github.com/heliosgrounder/helioseq/actions/workflows/ci.yml/badge.svg)](https://github.com/heliosgrounder/helioseq/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/helioseq.svg)](https://pypi.org/project/helioseq/)
+[![Python](https://img.shields.io/pypi/pyversions/helioseq.svg)](https://pypi.org/project/helioseq/)
+
+A toolkit for working with biological sequences in Python. Streaming FASTA and
+FASTQ, sequence primitives, motif scoring, empirical null distributions, and a
+fast, correct implementation of k-let preserving shuffling.
+
+```bash
+pip install helioseq
+```
+
+```python
+from helioseq import seqio
+from helioseq.shuffle import shuffle
+
+for record in seqio.read_sequences("peaks.fa.gz"):
+    background = shuffle(record.sequence, k=2, seed=42)
+```
+
+No required dependencies. One `abi3` wheel per platform covers Python 3.9
+through 3.14 and beyond, and if no wheel matches and no compiler is available
+the package still installs and falls back to a pure-Python implementation that
+produces byte-identical results.
+
+---
+
+## What is in it
+
+| | |
+|---|---|
+| `helioseq.seq` | Sequence types, alphabets and validation, the genetic code, reverse complement, composition |
+| `helioseq.seqio` | Streaming FASTA/FASTQ, gzip/bzip2/xz detected from magic bytes |
+| `helioseq.stats` | Empirical null distributions with p-values that are actually correct |
+| `helioseq.motifs` | Position weight matrices, scanning, log-odds conversion |
+| `helioseq.shuffle` | k-let preserving shuffling and the null models built on it |
+| `helioseq.cli` | The `helioseq` command |
+| `helioseq.compat` | A shim for code written against `ushuffle` 1.x |
+
+The layering is deliberate and enforced by tests: `seq` depends on nothing,
+`seqio` on `seq`, the analysis domains on both, the CLI on everything.
+[`docs/architecture.md`](docs/architecture.md) is the contract a new domain has
+to meet — adding one is a local change, not a refactor.
+
+Importing `helioseq` is cheap: subpackages load on first use, so a script that
+only parses FASTA never pays for the shuffling extension, and NumPy is imported
+only by the code that needs it.
+
+---
+
+## Sequences
+
+```python
+>>> from helioseq import seq
+>>> seq.reverse_complement("ACGTTG")
+'CAACGT'
+>>> seq.translate("ATGGCTGCAGGTTTAAAGCTGTAA")
+'MAAGLKL*'
+>>> seq.detect("MKVLAAGIVGLNL").name
+'protein'
+>>> seq.validate("ACGTXCGT", seq.DNA)
+Traceback (most recent call last):
+ValueError: sequence contains characters outside the dna alphabet: 'X' at 4
+```
+
+Every function here takes `str`, `bytes`, `bytearray` or `memoryview` and
+returns the type it was given. Validation errors name the offending character
+and its position, because "invalid sequence" is not an actionable message for a
+file with 40 000 records in it.
+
+## Reading and writing
+
+```python
+from helioseq import seqio
+
+for record in seqio.read_sequences("reads.fastq.gz"):
+    print(record.id, len(record), record.quality[:10])
+
+with seqio.open_maybe_compressed("out.fa.gz", "wt") as handle:
+    seqio.write_record(handle, record, "fasta", wrap=60)
+```
+
+Everything streams: a 30 GB FASTQ passes through in constant memory.
+Compression is detected from magic bytes, so a gzipped file named `.fa` still
+works. Malformed input raises with a line number.
+
+## Shuffling
+
+A `k=2` shuffle preserves dinucleotide counts exactly, so GC content, CpG
+content and dinucleotide bias are unchanged while everything about the *order*
+of the sequence is destroyed. That is what makes the result usable as a
+background: signal that survives is not an artefact of composition.
+
+```python
+from helioseq.shuffle import Shuffler, shuffle_batch, is_degenerate
+
+sh = Shuffler(sequence, k=2, seed=42)
+background = sh.shuffle_many(1000)          # analyse once, draw many
+
+results = shuffle_batch(sequences, k=2, n=10, seed=1, threads=8)
+```
+
+The extension releases the GIL, so threads give real parallelism. Sequence *i*
+uses stream *i* of the seed, so `threads=8` and `threads=1` produce
+byte-identical output.
+
+**Check your background is a background.** Some sequences admit only one
+arrangement with their k-let counts, so "shuffling" returns the input every
+time — low-complexity regions, short sequences and large `k` all end up there,
+and nothing about the output looks wrong:
+
+```python
+>>> is_degenerate("GCGCGCGCGCGCGCGC", k=4)
+True
+```
+
+```bash
+helioseq check -i peaks.fa -k 2 --strict    # non-zero exit if anything is flagged
+```
+
+### Null models that match the question
+
+Real genomic FASTA carries annotations in-band — `N` runs mark assembly gaps,
+lowercase marks repeats — and a naive shuffle smears both through the sequence:
+
+```python
+from helioseq.shuffle import shuffle_masked, shuffle_windows, shuffle_segments
+
+shuffle_masked(sequence, k=2, keep="N", case="preserve")
+shuffle_windows(sequence, k=2, window=100)   # keep the local GC profile
+shuffle_segments(sequence, k=2, spans=exons) # your own annotation
+```
+
+For coding sequences, shuffling base by base destroys the reading frame:
+
+```python
+from helioseq.shuffle.codon import shuffle_codons, shuffle_synonymous
+
+shuffle_codons(cds)          # codon usage preserved; k=2 keeps codon pairs
+shuffle_synonymous(cds)      # protein AND codon usage both exactly preserved
+```
+
+`shuffle_synonymous` is the standard control for synonymous-site questions: RNA
+structure in coding regions, codon optimisation, exonic splicing elements.
+
+### Attribution and ML pipelines
+
+Dinucleotide-shuffled sequences are the usual reference baseline for DeepSHAP in
+genomics and for TF-MoDISco. The widely copied `deeplift.dinuc_shuffle` is pure
+NumPy, and at tens of thousands of sequences × twenty references each it becomes
+a real part of the runtime.
+
+```python
+from helioseq.shuffle.ml import dinuc_shuffle, shuffle_onehot
+
+references = dinuc_shuffle(onehot_sequence, 20, rng=numpy_rng)   # same signature
+batch = shuffle_onehot(arrays, n=20, seed=1, threads=8)          # (batch, n, L, 4)
+```
+
+One deliberate difference, and it is a correctness one rather than a speed one:
+the common NumPy implementation samples a walk by shuffling each vertex's
+out-edges independently, which is **not** uniform over sequences with the given
+dinucleotide counts. This uses Wilson's algorithm, which is. Expect slightly
+different — better — reference distributions, not identical output.
+
+## Statistics
+
+```python
+from helioseq.stats import null_test, kmer_frequency
+
+result = null_test(sequence, kmer_frequency("GGGCGG"), k=2, n=1000, seed=1)
+print(result.summary())
+```
+
+```
+observed      0.0142
+null          mean 0.0031, sd 0.0018, 95% [0.0007, 0.0069]
+z-score       6.174
+p-value       0.000999  (greater, 1000 shuffles of 2-lets)
+              at the resolution limit 1/(n+1) = 0.000999; increase n for a smaller p
+```
+
+Three things this gets right that hand-rolled versions usually do not:
+
+- The p-value uses the add-one correction `(1 + #{null ≥ observed}) / (n + 1)`,
+  so it can never be reported as `0` — a number no finite sample supports. When
+  the result sits at that floor, it says so.
+- The z-score is descriptive only, and a skewed null says so rather than
+  letting you quote a normal-theory p-value.
+- A statistic the null model preserves *by construction* is caught. Testing GC
+  content against a dinucleotide shuffle is vacuous; without a check it produces
+  a tidy table of `p = 1` rather than an error.
+
+Any callable works as the statistic, so the classic RNA folding z-score is three
+lines:
+
+```python
+import RNA
+result = null_test(seq, lambda s: RNA.fold(s)[1], k=2, n=1000, alternative="less")
+```
+
+## Motifs
+
+```python
+from helioseq import motifs
+from helioseq.stats import null_test
+
+pwm = motifs.from_counts(jaspar_counts)       # counts -> log-odds
+motifs.consensus(pwm)
+result = null_test(sequence, motifs.best_score(pwm), k=2, n=1000)
+```
+
+Motif enrichment against a composition-matched background is one call, because
+`best_score` returns a plain statistic.
+
+---
+
+## Command line
+
+```bash
+helioseq shuffle -i peaks.fa.gz -o background.fa -k 2 -n 10 --seed 42 --threads 8
+helioseq klets   -i peaks.fa -k 2 --aggregate --top 20
+helioseq check   -i peaks.fa -k 2                      # degeneracy report
+helioseq null    -i peaks.fa -k 1 -n 1000 --statistic cpg
+helioseq info    --length 250000000                    # memory before you try it
+```
+
+`--name-template` controls output ids (`{id}_shuf{n}` by default), `--check`
+verifies k-let counts on every record written, `--preserve-n` and `--case` keep
+genomic annotation intact, and `--window`, `--codon` and `--synonymous` select
+alternative null models. Everything streams and `-` means stdin/stdout.
+
+---
+
+## Correctness
+
+The shuffling core makes a strong claim — each result is drawn *uniformly* from
+the set of sequences with the given k-let counts — and a sampler could preserve
+the counts while still favouring some arrangements, which would bias every
+p-value computed against it. So it is tested as a claim, not as a feature:
+
+- **Exhaustive enumeration.** For short sequences the full set of valid shuffles
+  is enumerated by backtracking and compared with observed frequencies by
+  chi-square, for `k=2` and `k=3`. Coverage is checked too — a sampler that
+  never emits some valid arrangement is biased even if the ones it does emit
+  look balanced.
+- **Two implementations, pinned together.** The pure-Python backend reproduces
+  the C implementation byte for byte: same generator, same order of draws.
+  `tests/data/golden.json` is emitted by the C harness and asserted against the
+  Python port, so a change to either that alters results fails the suite.
+- **Memory safety.** `make ctest-asan` runs the C core under AddressSanitizer
+  and UndefinedBehaviorSanitizer, including eight threads shuffling
+  concurrently.
+- **The structure itself.** `tests/test_package.py` enforces the layering rules
+  by reading the import statements, and `tests/test_docs.py` runs every
+  docstring example in the package.
+- **CI** runs the suite on Linux, macOS and Windows across Python 3.9–3.14,
+  twice on each: once with the extension and once with `HELIOSEQ_BACKEND=python`.
+
+## Performance
+
+Measured with `python benchmarks/bench.py`:
+
+- the compiled backend is ~110× faster than the pure-Python fallback;
+- `Shuffler(...).shuffle_many(n)` beats a loop of `shuffle()` calls;
+- `shuffle_batch(..., threads=N)` scales with cores.
+
+Memory is the practical limit on long sequences: roughly 42 bytes per base, so a
+250 Mbp chromosome needs tens of gigabytes. `helioseq info --length N` says so
+before you find out the hard way. Sequences are limited to 2³¹−1 residues.
+
+---
+
+## Coming from `ushuffle` 1.x
+
+The shuffling core here is a rewrite of [uShuffle](https://github.com/guma44/ushuffle),
+whose last release (2020) does not build on Python 3.12 or newer. Alongside the
+build, the rewrite fixes several real bugs: two live `Shuffler` objects used to
+corrupt each other's memory, `str` input raised `TypeError`, seeding was global
+and one-way, and the random source was `rand()` — whose 32767 range on Windows
+silently broke uniformity for sequences over 32 kb.
+
+For an existing script, change one import:
+
+```python
+from helioseq.compat import ushuffle   # was: import ushuffle
+```
+
+The 1.x API — `shuffle(seq, k)`, `Shuffler`, `set_seed` — keeps working, with
+the bugs fixed (so output will not match 1.x for a given seed; it could not).
+New code should use `helioseq.shuffle` directly.
+
+## Development
+
+```bash
+git clone https://github.com/heliosgrounder/helioseq
+cd helioseq
+pip install -e ".[test,ml]"
+make test          # pytest, both backends
+make ctest-asan    # the C core under sanitizers
+make help          # everything else
+```
+
+The only build requirement is a C compiler. If it is missing, the install still
+succeeds and prints a warning; `helioseq info` reports which backend is live.
+
+### CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+| job | what it protects |
+|---|---|
+| `test` | the suite on Linux/macOS/Windows × Python 3.9–3.14, on **both** backends |
+| `c-core` | the C core under AddressSanitizer and UBSan, threads included; fails if regenerating `golden.json` produces a diff |
+| `structure` | the layering rules in `docs/architecture.md`, and every docstring example |
+| `no-compiler` | installing with every compiler hidden still works, on the fallback |
+| `packaging` | the sdist carries the C sources and rebuilds from scratch |
+| `lint`, `coverage` | ruff, mypy (advisory), coverage in the job summary |
+
+`release.yml` runs on a `v*` tag, or manually with a TestPyPI/PyPI choice. It
+checks the tag, `pyproject.toml`, `__version__` and `CHANGELOG.md` all agree
+*before* building anything; builds `abi3` wheels on five native runners; proves
+the one Linux wheel installs and runs on all six Python versions; publishes via
+trusted publishing with attestations (no token stored anywhere); then creates
+the GitHub release with notes taken from the changelog.
+
+`future-python.yml` runs weekly against pre-release Pythons — including
+installing a wheel built on 3.9 onto an interpreter that did not exist when it
+was built, with no compiler on `PATH`. That is the package's central promise, so
+it is checked continuously rather than assumed.
+
+## Citation
+
+The shuffling algorithm is not ours. If you use `helioseq.shuffle`, cite:
+
+> Jiang M, Anderson J, Gillespie J, Mayne M. uShuffle: a useful tool for
+> shuffling biological sequences while preserving the k-let counts.
+> *BMC Bioinformatics* 2008;9:192. doi:10.1186/1471-2105-9-192
+
+`CITATION.cff` has the machine-readable form.
+
+## Licence
+
+BSD 3-Clause. The shuffling algorithm and C core derive from uShuffle by Jiang,
+Anderson, Gillespie and Mayne (BSD-3); their notice is in
+`src/libushuffle/LICENSE.original` and must be kept in any redistribution.

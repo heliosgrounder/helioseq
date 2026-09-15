@@ -1,0 +1,131 @@
+[build-system]
+# No Cython, no code generation: the extension is handwritten C against
+# the limited API. See setup.py for why.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "helioseq"
+version = "0.1.0"
+description = "A toolkit for working with biological sequences: k-let preserving shuffling, null models, streaming FASTA/FASTQ, motifs"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "BSD-3-Clause"
+license-files = ["LICENSE", "src/libushuffle/LICENSE.original"]
+keywords = [
+    "bioinformatics",
+    "sequence",
+    "fasta",
+    "fastq",
+    "shuffling",
+    "dinucleotide",
+    "null model",
+    "motif",
+    "background",
+    "ushuffle",
+]
+authors = [{ name = "Helios Grounder" }]
+maintainers = [{ name = "Helios Grounder" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: C",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# NumPy is needed only for the one-hot helpers in helioseq.shuffle.ml.
+# Nothing else in the toolkit imports it.
+ml = ["numpy>=1.21"]
+test = ["pytest>=7", "pytest-cov"]
+dev = ["ruff", "mypy", "build", "twine", "cibuildwheel"]
+
+[project.urls]
+Homepage = "https://github.com/heliosgrounder/helioseq"
+Source = "https://github.com/heliosgrounder/helioseq"
+Issues = "https://github.com/heliosgrounder/helioseq/issues"
+Changelog = "https://github.com/heliosgrounder/helioseq/blob/main/CHANGELOG.md"
+"Shuffling algorithm (please cite)" = "https://doi.org/10.1186/1471-2105-9-192"
+
+[project.scripts]
+helioseq = "helioseq.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+zip-safe = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["helioseq*"]
+
+[tool.setuptools.package-data]
+helioseq = ["py.typed"]
+"helioseq.shuffle" = ["*.pyi"]
+
+[tool.cibuildwheel]
+# One build per platform, not one per Python version: the extension targets the
+# stable ABI, so the cp39-abi3 wheel this produces also serves 3.10 ... 3.14 and
+# whatever comes next. A new Python release cannot break installation, and
+# nobody needs a compiler.
+build = "cp39-*"
+skip = "*-musllinux_i686 pp*"
+# "auto" means each CI runner builds only its own architecture. The release
+# matrix supplies the coverage by using native runners (including
+# ubuntu-24.04-arm and macos-13), which avoids emulating aarch64 under QEMU and
+# -- more importantly -- means every wheel is built on a machine that can also
+# run the test suite against it. Listing several arches here would silently
+# produce cross-compiled, untested wheels.
+archs = ["auto64"]
+# Never let a failed compile fall back to the pure-Python backend and ship as a
+# silently 100x slower wheel.
+environment = { HELIOSEQ_REQUIRE_EXTENSION = "1" }
+build-frontend = "build"
+test-requires = ["pytest"]
+test-command = "pytest {project}/tests -q -x"
+
+[tool.coverage.run]
+source = ["helioseq"]
+branch = true
+omit = ["*/_core.pyi"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+markers = [
+    "slow: statistical tests that draw many shuffles",
+]
+# Keep the doctests in the package honest; they are the examples users read.
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 90
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["UP031"]  # printf-style formatting is fine and avoids f-string churn
+
+[tool.mypy]
+python_version = "3.9"
+files = ["src/ushuffle"]
+ignore_missing_imports = true
+warn_unused_ignores = true
