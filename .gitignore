@@ -1,2 +1,26 @@
+# Build artefacts
+build/
+dist/
+*.egg-info/
+*.so
+*.pyd
+*.o
+*.a
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors and OS
+.idea/
+.vscode/
 .DS_Store
-.venv

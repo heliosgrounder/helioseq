@@ -1,0 +1,19 @@
+version: 2
+
+updates:
+  # Actions are the one dependency this project cannot pin in pyproject.toml,
+  # and a stale cibuildwheel is how a project quietly stops producing wheels
+  # for new platforms. Monthly is often enough for a package with no runtime
+  # dependencies.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+    groups:
+      # One PR for the routine bumps; anything major still comes separately so
+      # it gets read rather than rubber-stamped.
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

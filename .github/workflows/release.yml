@@ -1,0 +1,243 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to publish"
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false  # never abandon a half-finished publish
+
+jobs:
+  # A tag that disagrees with pyproject.toml publishes the wrong version, or
+  # fails at upload with "file already exists" long after the wheels are built.
+  # Checking first costs seconds and catches it before anything is built.
+  check:
+    name: Version and tag agree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - id: version
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, pathlib, re, tomllib
+
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          version = project["project"]["version"]
+
+          source = pathlib.Path("src/helioseq/__init__.py").read_text()
+          in_code = re.search(r'__version__ = "([^"]+)"', source).group(1)
+          if in_code != version:
+              raise SystemExit(
+                  "pyproject.toml says %s but helioseq.__version__ is %s"
+                  % (version, in_code)
+              )
+
+          ref = os.environ.get("GITHUB_REF", "")
+          if ref.startswith("refs/tags/"):
+              tag = ref.split("/", 2)[2]
+              if tag.lstrip("v") != version:
+                  raise SystemExit(
+                      "tag %s does not match version %s; retag or bump the "
+                      "version before releasing" % (tag, version)
+                  )
+
+          changelog = pathlib.Path("CHANGELOG.md").read_text()
+          if "## %s" % version not in changelog:
+              raise SystemExit("CHANGELOG.md has no '## %s' section" % version)
+
+          print("version=%s" % version)
+          PY
+
+      - run: echo "Releasing ${{ steps.version.outputs.version }}"
+
+  wheels:
+    name: Wheels — ${{ matrix.os }}
+    needs: [check]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # One entry per native runner architecture. cibuildwheel is configured
+        # with archs = "auto", so each runner builds only what it can also run
+        # the test suite on -- no QEMU, no untested cross-compiled wheels.
+        os:
+          - ubuntu-latest      # manylinux + musllinux, x86_64
+          - ubuntu-24.04-arm   # manylinux + musllinux, aarch64
+          - macos-13           # x86_64
+          - macos-latest       # arm64
+          - windows-latest     # AMD64
+    steps:
+      - uses: actions/checkout@v4
+
+      # One cp39-abi3 wheel per platform covers Python 3.9 through 3.14 and
+      # everything after, which is why this matrix is by platform rather than
+      # by Python version.
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.21.3
+        env:
+          CIBW_ENVIRONMENT: HELIOSEQ_REQUIRE_EXTENSION=1
+
+      - name: Every wheel must carry the abi3 tag
+        shell: bash
+        run: |
+          ls -la wheelhouse/
+          count=0
+          for wheel in wheelhouse/*.whl; do
+            count=$((count + 1))
+            case "$(basename "$wheel")" in
+              *-abi3-*) ;;
+              *) echo "::error::$wheel is not an abi3 wheel; the limited-API build regressed" && exit 1 ;;
+            esac
+          done
+          [ "$count" -gt 0 ] || { echo "::error::no wheels were produced"; exit 1; }
+          echo "$count abi3 wheel(s) OK"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  sdist:
+    needs: [check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build twine
+      - run: python -m build --sdist
+      - run: python -m twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  # The whole abi3 claim is that one wheel serves every Python from 3.9 on.
+  # cibuildwheel only tested it on 3.9, so test the same file on the others.
+  smoke-test:
+    name: One wheel, python ${{ matrix.python }}
+    needs: [wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-ubuntu-latest
+          path: wheelhouse
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the single abi3 wheel on this interpreter
+        run: |
+          wheel=$(ls wheelhouse/*manylinux*x86_64.whl | head -1)
+          [ -n "$wheel" ] || { echo "::error::no manylinux x86_64 wheel found"; exit 1; }
+          echo "installing $wheel"
+          python -m pip install "$wheel"
+
+      - name: It runs, on the compiled backend
+        run: |
+          python -c "import helioseq, sys; b = helioseq.shuffle.backend(); print(sys.version.split()[0], b); sys.exit(0 if b == 'c' else 1)"
+          python -c "import helioseq; print(helioseq.shuffle.shuffle('ACGTACGTAGCTAGCT', 2, seed=42))"
+          helioseq info
+
+  publish:
+    needs: [check, wheels, sdist, smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi') && 'testpypi' || 'release' }}
+    permissions:
+      id-token: write  # trusted publishing: no API token is stored anywhere
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: What is about to be published
+        run: ls -la dist/
+
+      # Both conditions name the event explicitly. Testing the ref alone would
+      # publish to real PyPI when someone runs this manually *from a tag* and
+      # asks for TestPyPI -- which is exactly when they are being careful.
+      - name: Publish to TestPyPI
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          attestations: true
+
+      - name: Publish to PyPI
+        if: >-
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+          || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
+
+  github-release:
+    needs: [check, publish]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write  # only this job creates anything in the repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Take the notes from CHANGELOG.md
+        run: |
+          python - <<'PY'
+          import pathlib, re
+
+          version = "${{ needs.check.outputs.version }}"
+          text = pathlib.Path("CHANGELOG.md").read_text()
+          # Everything from this version's heading up to the next one.
+          match = re.search(
+              r"^## %s.*?$(.*?)(?=^## |\Z)" % re.escape(version),
+              text,
+              re.MULTILINE | re.DOTALL,
+          )
+          notes = match.group(1).strip() if match else "See CHANGELOG.md."
+          pathlib.Path("release-notes.md").write_text(notes + "\n")
+          PY
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "helioseq ${{ needs.check.outputs.version }}" \
+            --notes-file release-notes.md \
+            dist/*

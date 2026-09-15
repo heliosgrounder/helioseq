@@ -1,0 +1,102 @@
+name: Future Python
+
+# The package's central promise is that a new Python release cannot break
+# installation: the extension targets the stable ABI, so one abi3 wheel keeps
+# working on interpreters that did not exist when it was built. A promise about
+# the future needs checking against the future, so this runs weekly against
+# pre-release Pythons.
+#
+# It is deliberately separate from CI and allowed to fail: a broken alpha is
+# news, not a reason to block every pull request.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"  # Mondays, off the hour to avoid the rush
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: future-python
+  cancel-in-progress: true
+
+jobs:
+  prerelease:
+    name: py${{ matrix.python }} (pre-release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        id: setup
+        continue-on-error: true
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
+
+      - name: Skip if this version does not exist yet
+        if: steps.setup.outcome != 'success'
+        run: |
+          echo "::notice::Python ${{ matrix.python }} is not available yet; nothing to check."
+
+      - name: Build and test from source
+        if: steps.setup.outcome == 'success'
+        env:
+          HELIOSEQ_REQUIRE_EXTENSION: "1"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          python -c "import helioseq, sys; b = helioseq.shuffle.backend(); print(sys.version, b); sys.exit(0 if b == 'c' else 1)"
+          python -m pytest tests -q
+
+      - name: Report a break
+        if: failure() && steps.setup.outcome == 'success'
+        run: |
+          echo "::warning::helioseq does not build or pass on Python ${{ matrix.python }}. Fix it before that release ships, not after."
+
+  # The stronger claim: a wheel built today, installed on an interpreter that
+  # did not exist when it was built, with no compiler involved.
+  existing-wheel:
+    name: Today's wheel on py${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the abi3 wheel on the oldest supported Python
+        uses: pypa/cibuildwheel@v2.21.3
+        env:
+          CIBW_BUILD: cp39-manylinux_x86_64
+          CIBW_ENVIRONMENT: HELIOSEQ_REQUIRE_EXTENSION=1
+
+      - uses: actions/setup-python@v5
+        id: setup
+        continue-on-error: true
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
+
+      - name: Install it without a compiler anywhere on PATH
+        if: steps.setup.outcome == 'success'
+        run: |
+          mkdir -p "$HOME/nocc"
+          for tool in cc gcc clang; do
+            printf '#!/bin/sh\nexit 127\n' > "$HOME/nocc/$tool"
+            chmod +x "$HOME/nocc/$tool"
+          done
+          wheel=$(ls wheelhouse/*.whl | head -1)
+          PATH="$HOME/nocc:$PATH" python -m pip install --only-binary :all: "$wheel"
+          python -c "import helioseq, sys; b = helioseq.shuffle.backend(); print(sys.version.split()[0], b); sys.exit(0 if b == 'c' else 1)"
+          helioseq info
