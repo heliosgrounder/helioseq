@@ -176,3 +176,18 @@ def test_numpy_is_not_imported_by_the_core_domains():
         "sys.exit(1 if 'numpy' in sys.modules else 0)\n"
     )
     assert subprocess.run([sys.executable, "-c", script], check=False).returncode == 0
+
+
+def test_torch_is_not_imported_by_the_core_domains():
+    """PyTorch belongs to helioseq.shuffle.ml_torch alone. Importing the rest of the
+    toolkit must not drag it in -- it is an optional dependency."""
+    import subprocess
+    import sys
+
+    script = (
+        "import sys\n"
+        "import helioseq.seq, helioseq.seqio, helioseq.stats, helioseq.motifs\n"
+        "import helioseq.shuffle, helioseq.cli\n"
+        "sys.exit(1 if 'torch' in sys.modules else 0)\n"
+    )
+    assert subprocess.run([sys.executable, "-c", script], check=False).returncode == 0
