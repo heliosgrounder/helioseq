@@ -2,8 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branched: [main]
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
   pull_request:
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
   workflow_dispatch:
 
 # Least privilege by default; the jobs here only ever read the repository.

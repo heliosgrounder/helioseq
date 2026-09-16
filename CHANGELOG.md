@@ -3,7 +3,7 @@
 All notable changes are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
-## 0.1.0 — unreleased
+## 0.1.5 — unreleased
 
 First release. helioseq starts as a toolkit rather than a single-purpose
 library: `seq`, `seqio`, `stats`, `motifs` and `shuffle` are separate domains
