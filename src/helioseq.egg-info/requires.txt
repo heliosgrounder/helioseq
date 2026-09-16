@@ -1,14 +1,17 @@
 
 [dev]
-build
-cibuildwheel
-mypy
 ruff
+mypy
+build
 twine
+cibuildwheel
 
 [ml]
 numpy>=1.21
 
 [test]
-pytest-cov
 pytest>=7
+pytest-cov
+
+[torch]
+torch>=2.0

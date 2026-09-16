@@ -52,6 +52,7 @@ src/helioseq/shuffle/codon.py
 src/helioseq/shuffle/klets.py
 src/helioseq/shuffle/masking.py
 src/helioseq/shuffle/ml.py
+src/helioseq/shuffle/ml_torch.py
 src/helioseq/shuffle/shuffler.py
 src/helioseq/shuffle/windows.py
 src/helioseq/stats/__init__.py
@@ -74,6 +75,7 @@ tests/test_shuffle_codon.py
 tests/test_shuffle_core.py
 tests/test_shuffle_masking_windows.py
 tests/test_shuffle_ml.py
+tests/test_shuffle_ml_torch.py
 tests/test_shuffle_uniformity.py
 tests/test_stats.py
 tests/c/test_libushuffle.c

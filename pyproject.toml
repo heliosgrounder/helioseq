@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "helioseq"
-version = "0.1.0"
+version = "0.1.5"
 description = "A toolkit for working with biological sequences: k-let preserving shuffling, null models, streaming FASTA/FASTQ, motifs"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -49,6 +49,9 @@ dependencies = []
 # NumPy is needed only for the one-hot helpers in helioseq.shuffle.ml.
 # Nothing else in the toolkit imports it.
 ml = ["numpy>=1.21"]
+# torch is needed only for the one-hot tensor helpers in
+# helioseq.shuffle.ml_torch. Nothing else in the toolkit imports it.
+torch = ["torch>=2.0"]
 test = ["pytest>=7", "pytest-cov"]
 dev = ["ruff", "mypy", "build", "twine", "cibuildwheel"]
 

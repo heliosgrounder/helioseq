@@ -24,9 +24,12 @@ What is where
 ``codon``     frame-aware null models for coding sequences
 ``ml``        ``dinuc_shuffle`` for attribution pipelines (needs NumPy for
               one-hot input; the plain string form does not)
+``ml_torch``  one-hot sequence tensors for PyTorch models/training (needs
+              torch)
 
-``ml`` is not imported here, so NumPy is never pulled in unless you ask for it:
-``from helioseq.shuffle import ml``.
+Neither ``ml`` nor ``ml_torch`` is imported here, so NumPy and torch are
+never pulled in unless you ask for them: ``from helioseq.shuffle import ml``
+or ``from helioseq.shuffle import ml_torch``.
 """
 
 from __future__ import annotations

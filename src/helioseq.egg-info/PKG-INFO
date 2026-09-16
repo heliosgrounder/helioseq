@@ -1,15 +1,15 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: helioseq
-Version: 0.1.0
+Version: 0.1.5
 Summary: A toolkit for working with biological sequences: k-let preserving shuffling, null models, streaming FASTA/FASTQ, motifs
 Author: Helios Grounder
 Maintainer: Helios Grounder
-License: BSD-3-Clause
+License-Expression: BSD-3-Clause
 Project-URL: Homepage, https://github.com/heliosgrounder/helioseq
 Project-URL: Source, https://github.com/heliosgrounder/helioseq
 Project-URL: Issues, https://github.com/heliosgrounder/helioseq/issues
 Project-URL: Changelog, https://github.com/heliosgrounder/helioseq/blob/main/CHANGELOG.md
-Project-URL: Shuffling algorithm (please cite), https://doi.org/10.1186/1471-2105-9-192
+Project-URL: Citation, https://doi.org/10.1186/1471-2105-9-192
 Keywords: bioinformatics,sequence,fasta,fastq,shuffling,dinucleotide,null model,motif,background,ushuffle
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Science/Research
@@ -28,12 +28,28 @@ Classifier: Topic :: Scientific/Engineering :: Bio-Informatics
 Classifier: Typing :: Typed
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
-Provides-Extra: dev
-Provides-Extra: ml
-Provides-Extra: test
 License-File: LICENSE
+License-File: src/libushuffle/LICENSE.original
+Provides-Extra: ml
+Requires-Dist: numpy>=1.21; extra == "ml"
+Provides-Extra: torch
+Requires-Dist: torch>=2.0; extra == "torch"
+Provides-Extra: test
+Requires-Dist: pytest>=7; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Provides-Extra: dev
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: build; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+Requires-Dist: cibuildwheel; extra == "dev"
+Dynamic: license-file
 
 # helioseq
+
+[![CI](https://github.com/heliosgrounder/helioseq/actions/workflows/ci.yml/badge.svg)](https://github.com/heliosgrounder/helioseq/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/helioseq.svg)](https://pypi.org/project/helioseq/)
+[![Python](https://img.shields.io/pypi/pyversions/helioseq.svg)](https://pypi.org/project/helioseq/)
 
 A toolkit for working with biological sequences in Python. Streaming FASTA and
 FASTQ, sequence primitives, motif scoring, empirical null distributions, and a
@@ -331,10 +347,36 @@ cd helioseq
 pip install -e ".[test,ml]"
 make test          # pytest, both backends
 make ctest-asan    # the C core under sanitizers
+make help          # everything else
 ```
 
 The only build requirement is a C compiler. If it is missing, the install still
 succeeds and prints a warning; `helioseq info` reports which backend is live.
+
+### CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+| job | what it protects |
+|---|---|
+| `test` | the suite on Linux/macOS/Windows × Python 3.9–3.14, on **both** backends |
+| `c-core` | the C core under AddressSanitizer and UBSan, threads included; fails if regenerating `golden.json` produces a diff |
+| `structure` | the layering rules in `docs/architecture.md`, and every docstring example |
+| `no-compiler` | installing with every compiler hidden still works, on the fallback |
+| `packaging` | the sdist carries the C sources and rebuilds from scratch |
+| `coverage` | coverage in the job summary |
+
+`release.yml` runs on a `v*` tag, or manually with a TestPyPI/PyPI choice. It
+checks the tag, `pyproject.toml`, `__version__` and `CHANGELOG.md` all agree
+*before* building anything; builds `abi3` wheels on five native runners; proves
+the one Linux wheel installs and runs on all six Python versions; publishes via
+trusted publishing with attestations (no token stored anywhere); then creates
+the GitHub release with notes taken from the changelog.
+
+`future-python.yml` runs weekly against pre-release Pythons — including
+installing a wheel built on 3.9 onto an interpreter that did not exist when it
+was built, with no compiler on `PATH`. That is the package's central promise, so
+it is checked continuously rather than assumed.
 
 ## Citation
 
