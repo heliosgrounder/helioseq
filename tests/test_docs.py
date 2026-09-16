@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import doctest
 import importlib
+import importlib.util
 import pkgutil
 
 import pytest
@@ -26,9 +27,31 @@ def _all_modules():
     return names
 
 
+def _missing_optional_dependency(module):
+    """Name of the optional dependency gating this module's examples, if any.
+
+    Modules that need an optional package expose it via a ``_require_<name>``
+    helper (see ``ml._require_numpy``, ``ml_torch._require_torch``). Doctests
+    that exercise such a module raise a plain ``ImportError`` when the
+    dependency isn't installed -- e.g. torch has no wheel for every Python
+    version, so installs without a compiler can't build it from source. That
+    ``ImportError`` surfaces as a doctest failure rather than a test error, so
+    it has to be checked for explicitly before running the doctests.
+    """
+    for name in vars(module):
+        if name.startswith("_require_"):
+            dependency = name[len("_require_") :]
+            if importlib.util.find_spec(dependency) is None:
+                return dependency
+    return None
+
+
 @pytest.mark.parametrize("module_name", _all_modules())
 def test_docstring_examples(module_name):
     module = importlib.import_module(module_name)
+    missing = _missing_optional_dependency(module)
+    if missing is not None:
+        pytest.skip("%s doctests need optional dependency %r" % (module_name, missing))
     result = doctest.testmod(
         module,
         verbose=False,
