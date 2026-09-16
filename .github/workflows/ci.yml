@@ -52,7 +52,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install
-        run: python -m pip install -e ".[test,ml]"
+        run: python -m pip install -e ".[test,ml,torch]"
 
       - name: Confirm the compiled backend is live
         run: >
@@ -109,7 +109,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - run: python -m pip install -e ".[test,ml]"
+      - run: python -m pip install -e ".[test,ml,torch]"
 
       - name: Import layering matches docs/architecture.md
         run: python -m pytest tests/test_package.py -q
@@ -186,7 +186,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - run: python -m pip install -e ".[test,ml]"
+      - run: python -m pip install -e ".[test,ml,torch]"
 
       # Measured on the pure-Python backend so the shuffling core counts as
       # Python lines; the C backend would show that file as unexecuted.
